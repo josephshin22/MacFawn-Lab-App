@@ -7,6 +7,8 @@ from plotnine import ggplot, aes, geom_boxplot
 import plotly.graph_objects as go
 from plotnine import ggplot, aes, geom_boxplot, geom_jitter, labs, theme_minimal, theme
 from matplotlib import pyplot as plt
+from scipy.stats import ttest_ind
+
 
 # Set page configuration
 st.set_page_config(
@@ -202,8 +204,6 @@ elif page == "(4) Create graphs / visualizations":
                     "Select Minimum Number of Detections (CD21+)", min_value=1, max_value=100, value=50, key=3)
                 # Filter "LA" rows based on the selected threshold for "Num Detections"
 
-                # BROKEN!! - Increasing GC threshold affects la count???
-
                 # Filter separately for LA and CD21+
                 la_only_filtered = df[(df["Classification"] == "LA") & (
                     df["Num Detections"] > threshold_la)]
@@ -312,6 +312,7 @@ elif page == "(4) Create graphs / visualizations":
                     )
 
                     st.plotly_chart(fig)
+
                 else:
                     # Create the plot
                     plot = (
@@ -331,6 +332,26 @@ elif page == "(4) Create graphs / visualizations":
                     # Show plot
                     fig = plot.draw()
                     st.pyplot(fig)
+
+                # Drop NaNs to avoid issues in t-test -- not necessary but do anyways for now
+                group_gc = df[df["Classification"] ==
+                              "GC"]["Ki67&CD20/CD20"].dropna()
+                group_non_gc = df[df["Classification"] ==
+                                  "non-GC"]["Ki67&CD20/CD20"].dropna()
+
+                t_stat, p_value = ttest_ind(
+                    group_gc, group_non_gc, equal_var=False)
+
+                # Display the result in Streamlit
+                st.markdown(
+                    f"**Two-tailed t-test**: t = {t_stat:.3f}, p = {p_value:.3e}")
+                if p_value < 0.05:
+                    st.markdown(
+                        "**Result:** Significant difference (p < 0.05)")
+                else:
+                    st.markdown(
+                        "**Result:** No significant difference (p ≥ 0.05)")
+
             with col4:
                 plot_type_2 = st.radio(
                     "Select Plot Type",
@@ -379,13 +400,13 @@ elif page == "(4) Create graphs / visualizations":
                                  title="B Cell Proliferation",
                                  points=False,  # Hide outliers
                                  color="Classification",
-                                 color_discrete_sequence=["#ff8000"])  # Hex code for orange
+                                 color_discrete_sequence=["#00ff00"])  # Hex code for lime
 
                     jitter = px.strip(df,
                                       x="Classification",
                                       y="Ki67&CD20/CD20",
                                       color="Classification",
-                                      color_discrete_sequence=["#ff8000"])  # Hex code for orange
+                                      color_discrete_sequence=["#00ff00"])  # Hex code for lime
 
                     # Get the traces from the jitter plot and add them to the box plot
                     for trace in jitter.data:
@@ -414,10 +435,10 @@ elif page == "(4) Create graphs / visualizations":
                                        y="Ki67&CD20/CD20", color="Classification"))
                         # Boxplot without outliers
                         + geom_boxplot(outlier_shape=None,
-                                       fill="#ff8000", alpha=0.5)
+                                       fill="#00ff00", alpha=0.5)
                         # Jittered points
                         + geom_jitter(size=2, width=0.2,
-                                      alpha=0.7, color="#ff8000")
+                                      alpha=0.7, color="#00ff00")
                         + labs(title="B Cell Hypermutation",
                                x="Classification", y="% AID+/CD20+ Cells")
                         + theme(legend_position="none")  # Hide legend
@@ -426,6 +447,29 @@ elif page == "(4) Create graphs / visualizations":
                     # Show plot
                     fig = plot.draw()
                     st.pyplot(fig)
+
+                # Drop NaN values to avoid issues in the t-test
+                group1 = df[df["Classification"] ==
+                            "GC"]["Ki67&CD20/CD20"].dropna()
+                group2 = df[df["Classification"] ==
+                            "non-GC"]["Ki67&CD20/CD20"].dropna()
+
+                # Two-tailed independent t-test
+                t_stat, p_val = ttest_ind(
+                    group1, group2, equal_var=False)  # Welch's t-test
+
+                # Display the result in Streamlit
+                st.markdown(
+                    f"**Two-tailed t-test**: t = {t_stat:.3f}, p = {p_val:.3e}")
+                if p_val < 0.05:
+                    st.markdown(
+                        "**Result:** Significant difference (p < 0.05)")
+                else:
+                    st.markdown(
+                        "**Result:** No significant difference (p ≥ 0.05)")
+            
+            col5, col6 = st.columns(2)
+
         else:
             st.error(
                 "The uploaded file must contain the following columns: ROI, Num CD20+, Num Ki67+, and Classification."
