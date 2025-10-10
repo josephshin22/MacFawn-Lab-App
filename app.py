@@ -6,7 +6,6 @@ import plotly.express as px
 from plotnine import ggplot, aes, geom_boxplot
 import plotly.graph_objects as go
 from plotnine import ggplot, aes, geom_boxplot, geom_jitter, labs, theme_minimal, theme
-from matplotlib import pyplot as plt
 from scipy.stats import ttest_ind
 
 
@@ -196,42 +195,40 @@ elif page == "(4) Create graphs / visualizations":
                              title="Count of Lymphoid Aggregate (LA) Classifications per Patient", labels={"Image": "Patient (Image ID)", "LA Count": "# of LA Classifications"})
                 st.plotly_chart(fig)
             with col2:
-                # % GC+ per patient
-                # Add Streamlit slider for adjusting the threshold for "Num Detections"
+                # Slider thresholds (if you still want to filter detections, keep this;
+                # otherwise, remove threshold logic entirely)
                 threshold_la = st.slider(
-                    "Select Minimum Number of Detections (LA)", min_value=1, max_value=100, value=50, key=2)
+                    "Select Minimum Number of Detections (LA)", min_value=1, max_value=100, value=50, key="la_slider"
+                )
                 threshold_gc = st.slider(
-                    "Select Minimum Number of Detections (CD21+)", min_value=1, max_value=100, value=50, key=3)
-                # Filter "LA" rows based on the selected threshold for "Num Detections"
+                    "Select Minimum Number of Detections (CD21+)", min_value=1, max_value=100, value=50, key="gc_slider"
+                )
 
-                # Filter separately for LA and CD21+
-                la_only_filtered = df[(df["Classification"] == "LA") & (
-                    df["Num Detections"] > threshold_la)]
-                gc_only_filtered = df[(
-                    df["Classification"] == "CD21+") & (df["Num Detections"] > threshold_gc)]
+                # Filter rows based on threshold
+                la_only_filtered = df[(df["Classification"] == "LA") & (df["Num Detections"] >= threshold_la)]
+                gc_only_filtered = df[(df["Classification"] == "CD21+") & (df["Num Detections"] >= threshold_gc)]
 
-                # Group by "Image" and count occurrences for each classification
-                count_la_per_patient = la_only_filtered.groupby(
-                    "Image").size().reset_index(name="LA Count")
-                count_gc_per_patient = gc_only_filtered.groupby(
-                    "Image").size().reset_index(name="CD21+ Count")
+                # Count **rows per patient**, not detections
+                count_la_per_patient = la_only_filtered.groupby("Image").size().reset_index(name="LA Rows")
+                count_gc_per_patient = gc_only_filtered.groupby("Image").size().reset_index(name="CD21+ Rows")
 
-                # Merge the two DataFrames
-                percentage_df = count_gc_per_patient.merge(
-                    count_la_per_patient, on="Image", how="inner")
+                # Merge
+                percentage_df = count_gc_per_patient.merge(count_la_per_patient, on="Image", how="outer").fillna(0)
 
-                # Calculate the percentage of GC+ relative to LA
+                # Calculate percentage (row counts)
                 percentage_df["Percentage GC+"] = (
-                    percentage_df["CD21+ Count"] / percentage_df["LA Count"]) * 100
+                    percentage_df["CD21+ Rows"] / percentage_df["LA Rows"]
+                ) * 100
 
-                # Create the bar chart
-                fig = px.bar(percentage_df,
-                             x="Image",
-                             y="Percentage GC+",
-                             title="Percentage of GC+ (CD21+) Classifications Relative to LA per Patient",
-                             labels={"Image": "Patient (Image ID)", "% GC+": "Percentage of GC+ Classifications (%)"})
+                # Plot
+                fig = px.bar(
+                    percentage_df.sort_values("Percentage GC+"),
+                    x="Image",
+                    y="Percentage GC+",
+                    title="Percent Germinal Center Positive (CD21+) Relative to LA (Row Counts)",
+                    labels={"Image": "Patient (Image ID)", "Percentage GC+": "Percent GC+ (%)"}
+                )
 
-                # Display the plot in Streamlit
                 st.plotly_chart(fig)
 
             col3, col4 = st.columns(2)
@@ -469,7 +466,74 @@ elif page == "(4) Create graphs / visualizations":
                         "**Result:** No significant difference (p ≥ 0.05)")
             
             col5, col6 = st.columns(2)
+            # metadata_cols = [c for c in df.columns if str(c).lower().startswith("metadata")]
+            # if metadata_cols:
+            #     # select which metadata column to group by
+            #     meta_col = st.selectbox("Select metadata column to group by", metadata_cols, key="meta_select")
+            #     with col5:
+            #         if "Num Detections" not in df.columns:
+            #             st.warning("Column 'Num Detections' not found — metadata grouping requires it.")
+            #         else:
+            #             meta_threshold = st.slider(
+            #                 "Select Minimum Number of Detections (metadata)",
+            #                 min_value=1, max_value=100, value=50, key="meta_thr_1"
+            #             )
 
+            #             # filter rows
+            #             df_meta = df[df["Num Detections"] >= meta_threshold]
+
+            #             # group by metadata value + classification
+            #             counts_meta = df_meta.groupby(meta_col).size().reset_index(name="Count")
+
+            #             # plot grouped bars (one for each classification under each metadata value)
+            #             fig_meta = px.bar(
+            #                 counts_meta,
+            #                 x=meta_col,
+            #                 y="Count",
+            #                 barmode="group",
+            #                 title=f"Counts of Classifications by {meta_col}",
+            #                 labels={meta_col: meta_col, "Count": "# of Detections"}
+            #             )
+            #             st.plotly_chart(fig_meta)
+
+
+            #     with col6:
+            #         if "Num Detections" not in df.columns:
+            #             st.warning("Column 'Num Detections' not found — metadata grouping requires it.")
+            #         else:
+            #             threshold_la_meta = st.slider(
+            #                 "Select Minimum Number of Detections (LA) by metadata",
+            #                 min_value=1, max_value=100, value=50, key="meta_thr_2"
+            #             )
+            #             threshold_gc_meta = st.slider(
+            #                 "Select Minimum Number of Detections (CD21+) by metadata",
+            #                 min_value=1, max_value=100, value=50, key="meta_thr_3"
+            #             )
+
+            #             la_only_meta = df[(df["Classification"] == "LA") & (df["Num Detections"] > threshold_la_meta)]
+            #             gc_only_meta = df[(df["Classification"] == "CD21+") & (df["Num Detections"] > threshold_gc_meta)]
+
+            #             count_la_per_meta = la_only_meta.groupby(meta_col).size().reset_index(name="LA Count")
+            #             count_gc_per_meta = gc_only_meta.groupby(meta_col).size().reset_index(name="CD21+ Count")
+
+            #             percentage_meta = count_gc_per_meta.merge(count_la_per_meta, on=meta_col, how="inner")
+            #             if not percentage_meta.empty:
+            #                 percentage_meta["Percentage GC+"] = (percentage_meta["CD21+ Count"] / percentage_meta["LA Count"]) * 100
+            #                 fig_meta_pct = px.bar(
+            #                     percentage_meta,
+            #                     x=meta_col,
+            #                     y="Percentage GC+",
+            #                     title=f"Percentage of GC+ (CD21+) Classifications Relative to LA by {meta_col}",
+            #                     labels={meta_col: meta_col, "Percentage GC+": "Percentage of GC+ Classifications (%)"}
+            #                 )
+            #                 st.plotly_chart(fig_meta_pct)
+            #             else:
+            #                 st.info("No overlapping metadata groups found with the selected thresholds.")
+            # else:
+            #     with col5:
+            #         st.info("No columns starting with 'metadata' were found. Add columns whose names start with 'metadata' to enable grouping.")
+            #     with col6:
+            #         st.empty()
         else:
             st.error(
                 "The uploaded file must contain the following columns: ROI, Num CD20+, Num Ki67+, and Classification."
