@@ -29,9 +29,6 @@ if page == "Home":
     Explore our research, utilize our proprietary software, or get in touch with us.
     """)
 
-    st.image("./static/images/qupath2.png",
-             caption="from gcc.edu", use_column_width=True)
-
 # Troubleshoot
 elif page == "Troubleshoot":
     st.title("Troubleshoot")
