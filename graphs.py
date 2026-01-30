@@ -3,10 +3,25 @@ import numpy as np
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from plotnine import ggplot, aes, geom_boxplot
 import plotly.graph_objects as go
-from plotnine import ggplot, aes, geom_boxplot, geom_jitter, labs, theme_minimal, theme
+from plotnine import ggplot, aes, geom_jitter, labs, theme_minimal, theme
 from scipy.stats import ttest_ind
+
+
+def _to_float(val):
+    """Convert a value or an array/tuple-like container to a float safely."""
+    try:
+        # Handle numpy arrays, tuples, lists, pandas Series
+        if isinstance(val, (list, tuple)):
+            return float(val[0])
+        import numpy as _np
+        import pandas as _pd
+        if isinstance(val, (_np.ndarray, _pd.Series)):
+            return float(val.flatten()[0])
+        return float(val)
+    except Exception:
+        # Fall back to converting via string
+        return float(str(val))
 
 
 def show():
@@ -147,74 +162,74 @@ def show():
             with col3:
                 plot_type = st.radio("Select Plot Type (Proliferation)", [
                                      "Interactive (Plotly)", "Static (ggplot)"], key="plot_toggle_3")
+                # Ensure a session-state color exists so the plot can use it on first render.
+                if 'color_3' not in st.session_state:
+                    st.session_state['color_3'] = '#ff8000'  # default orange
                 
                 df_plot = df.dropna(subset=["Ki67&CD20/CD20_prolif"])
                 
                 # Check if we should use Classification on the x-axis or the grouping column
                 x_col_3 = "Classification" if selected_meta_col == "Image (Default/Patient ID)" else group_by_col
-                color_col_3 = "Classification" if selected_meta_col != "Image (Default/Patient ID)" else None # Use Classification for color if grouping by metadata
+                # When default Image is selected, enable single-color mode via color picker. If grouping selected, disable coloring.
+                use_color_3 = (selected_meta_col == "Image (Default/Patient ID)")
+
+                # Read the current chosen color (may be updated by the picker on rerun)
+                chosen_color_3 = st.session_state.get('color_3', '#ff8000')
 
                 if plot_type == "Interactive (Plotly)":
-                    
-                    fig = px.box(df_plot,
-                                 x=x_col_3,
-                                 y="Ki67&CD20/CD20_prolif",
-                                 title="B Cell Proliferation",
-                                 points=False,
-                                 color=color_col_3, # Color by Classification if grouping by metadata
-                                 color_discrete_sequence=["#ff8000"]) # Hex code for orange (default if no color_col)
+                    # Use a strip (jitter) plot instead of a boxplot
+                    if use_color_3:
+                        fig = px.strip(
+                            df_plot,
+                            x=x_col_3,
+                            y="Ki67&CD20/CD20_prolif",
+                            title="B Cell Proliferation",
+                            color_discrete_sequence=[chosen_color_3],
+                        )
+                    else:
+                        fig = px.strip(
+                            df_plot,
+                            x=x_col_3,
+                            y="Ki67&CD20/CD20_prolif",
+                            title="B Cell Proliferation",
+                        )
 
-                    jitter = px.strip(df_plot,
-                                      x=x_col_3,
-                                      y="Ki67&CD20/CD20_prolif",
-                                      color=color_col_3,
-                                      color_discrete_sequence=["#ff8000"])
+                    # Adjust marker appearance
+                    fig.update_traces(marker=dict(opacity=0.7, size=6))
 
-                    # Get the traces from the jitter plot and add them to the box plot
-                    for trace in jitter.data:
-                        trace.marker.opacity = 0.7
-                        trace.marker.size = 4
-                        fig.add_trace(trace)
-
-                    # Update layout for better visualization
                     x_axis_title = "Classification" if x_col_3 == "Classification" else x_axis_title_grouping
-                    
                     fig.update_layout(
                         margin=dict(l=10, r=10),
-                        boxmode='group',
-                        boxgap=0.1,
-                        legend_title_text='Classification' if color_col_3 else None,
                         xaxis_title=x_axis_title,
                         yaxis_title='% Ki67+/CD20+ Cells',
-                        showlegend=bool(color_col_3) # Show legend if coloring by classification
+                        showlegend=False,
                     )
 
                     st.plotly_chart(fig)
 
                 else: # Static (ggplot)
                     x_axis_title = "Classification" if x_col_3 == "Classification" else x_axis_title_grouping
-                    fill_aes = aes(fill=color_col_3) if color_col_3 else aes(fill="#ff8000")
-                    
-                    # Create the plot
+
+                    # Use jitter points only; apply chosen color only when enabled
+                    if use_color_3:
+                        jitter_layer = geom_jitter(size=2, alpha=0.7, width=0.2, color=chosen_color_3)
+                    else:
+                        jitter_layer = geom_jitter(size=2, alpha=0.7, width=0.2)
+
                     plot = (
-                        ggplot(df_plot, aes(x=x_col_3,
-                                       y="Ki67&CD20/CD20_prolif")) + fill_aes
-                        # Boxplot without outliers
-                        + geom_boxplot(outlier_shape=None,
-                                       alpha=0.5, 
-                                       position='dodge' if color_col_3 else 'identity')
-                        # Jittered points
-                        + geom_jitter(size=2, width=0.2,
-                                      alpha=0.7, 
-                                      position='dodge' if color_col_3 else 'identity')
-                        + labs(title="B Cell Proliferation",
-                               x=x_axis_title, y="% Ki67+/CD20+ Cells")
-                        + theme(legend_position="right" if color_col_3 else "none")
+                        ggplot(df_plot, aes(x=x_col_3, y="Ki67&CD20/CD20_prolif"))
+                        + jitter_layer
+                        + labs(title="B Cell Proliferation", x=x_axis_title, y="% Ki67+/CD20+ Cells")
+                        + theme(legend_position="none")
                     )
 
                     # Show plot
                     fig = plot.draw()
                     st.pyplot(fig)
+
+                # Place color picker under the graph but above the stats (only when overall Image view selected)
+                if use_color_3:
+                    st.color_picker("Choose color for Proliferation plot", value=chosen_color_3, key='color_3')
 
                 # T-test
                 if selected_meta_col == "Image (Default/Patient ID)":
@@ -223,17 +238,18 @@ def show():
                     group_non_gc = df[df["Classification"] ==
                                       "non-GC"]["Ki67&CD20/CD20_prolif"].dropna()
 
-                    t_stat, p_value = ttest_ind(
-                        group_gc, group_non_gc, equal_var=False)
+                    t_result = ttest_ind(group_gc, group_non_gc, equal_var=False)
+                    # t_result may be an object with attributes or a tuple-like; extract safely
+                    t_stat = getattr(t_result, 'statistic', t_result[0])
+                    p_value = getattr(t_result, 'pvalue', t_result[1])
+                    p_value = _to_float(p_value)
 
                     st.markdown(
                         f"**Two-tailed t-test (GC vs. non-GC overall)**: t = {t_stat:.3f}, p = {p_value:.3e}")
                     if p_value < 0.05:
-                        st.markdown(
-                            "**Result:** Significant difference (p < 0.05)")
+                        st.markdown("**Result:** Significant difference (p < 0.05)")
                     else:
-                        st.markdown(
-                            "**Result:** No significant difference (p ≥ 0.05)")
+                        st.markdown("**Result:** No significant difference (p ≥ 0.05)")
                 else:
                     st.info(f"T-test is only calculated for the overall GC vs. non-GC difference. Select 'Image (Default/Patient ID)' to run the t-test.")
             
@@ -247,70 +263,71 @@ def show():
                 
                 df_plot_2 = df.dropna(subset=["AID+/CD20+_hyper"])
 
+                # Ensure a session-state color exists for plot 4
+                if 'color_4' not in st.session_state:
+                    st.session_state['color_4'] = '#00ff00'  # default lime
+
                 # Check if we should use Classification on the x-axis or the grouping column
                 x_col_4 = "Classification" if selected_meta_col == "Image (Default/Patient ID)" else group_by_col
-                color_col_4 = "Classification" if selected_meta_col != "Image (Default/Patient ID)" else None
+                # When default Image is selected, enable single-color mode via color picker. If grouping selected, disable coloring.
+                use_color_4 = (selected_meta_col == "Image (Default/Patient ID)")
                 
+                # Read chosen color for plot 4
+                chosen_color_4 = st.session_state.get('color_4', '#00ff00')
+
                 if plot_type_2 == "Interactive (Plotly)":
+                    # Use strip (jitter) plots for interactive hypermutation
+                    if use_color_4:
+                        fig = px.strip(
+                            df_plot_2,
+                            x=x_col_4,
+                            y="AID+/CD20+_hyper",
+                            title="B Cell Hypermutation",
+                            color_discrete_sequence=[chosen_color_4],
+                        )
+                    else:
+                        fig = px.strip(
+                            df_plot_2,
+                            x=x_col_4,
+                            y="AID+/CD20+_hyper",
+                            title="B Cell Hypermutation",
+                        )
 
-                    fig = px.box(df_plot_2,
-                                 x=x_col_4,
-                                 y="AID+/CD20+_hyper",
-                                 title="B Cell Hypermutation",
-                                 points=False,
-                                 color=color_col_4,
-                                 color_discrete_sequence=["#00ff00"]) # Hex code for lime (default if no color_col)
+                    fig.update_traces(marker=dict(opacity=0.7, size=6))
 
-                    jitter = px.strip(df_plot_2,
-                                      x=x_col_4,
-                                      y="AID+/CD20+_hyper",
-                                      color=color_col_4,
-                                      color_discrete_sequence=["#00ff00"])
-
-                    # Get the traces from the jitter plot and add them to the box plot
-                    for trace in jitter.data:
-                        trace.marker.opacity = 0.7
-                        trace.marker.size = 4
-                        fig.add_trace(trace)
-
-                    # Update layout for better visualization
                     x_axis_title = "Classification" if x_col_4 == "Classification" else x_axis_title_grouping
-                    
                     fig.update_layout(
                         margin=dict(l=10, r=10),
-                        boxmode='group',
-                        boxgap=0.1,
-                        legend_title_text='Classification' if color_col_4 else None,
                         xaxis_title=x_axis_title,
                         yaxis_title='% AID+/CD20+ Cells',
-                        showlegend=bool(color_col_4)
+                        showlegend=False,
                     )
 
                     st.plotly_chart(fig)
+
                 else: # Static (ggplot)
                     x_axis_title = "Classification" if x_col_4 == "Classification" else x_axis_title_grouping
-                    fill_aes = aes(fill=color_col_4) if color_col_4 else aes(fill="#00ff00")
-                    
-                    # Create the plot
+
+                    # Use jitter only; apply chosen color only when enabled
+                    if use_color_4:
+                        jitter_layer = geom_jitter(size=2, alpha=0.7, width=0.2, color=chosen_color_4)
+                    else:
+                        jitter_layer = geom_jitter(size=2, alpha=0.7, width=0.2)
+
                     plot = (
-                        ggplot(df_plot_2, aes(x=x_col_4,
-                                       y="AID+/CD20+_hyper")) + fill_aes
-                        # Boxplot without outliers
-                        + geom_boxplot(outlier_shape=None,
-                                       alpha=0.5, 
-                                       position='dodge' if color_col_4 else 'identity')
-                        # Jittered points
-                        + geom_jitter(size=2, width=0.2,
-                                      alpha=0.7, 
-                                      position='dodge' if color_col_4 else 'identity')
-                        + labs(title="B Cell Hypermutation",
-                               x=x_axis_title, y="% AID+/CD20+ Cells")
-                        + theme(legend_position="right" if color_col_4 else "none")
+                        ggplot(df_plot_2, aes(x=x_col_4, y="AID+/CD20+_hyper"))
+                        + jitter_layer
+                        + labs(title="B Cell Hypermutation", x=x_axis_title, y="% AID+/CD20+ Cells")
+                        + theme(legend_position="none")
                     )
 
                     # Show plot
                     fig = plot.draw()
                     st.pyplot(fig)
+
+                # Place color picker under the graph but above the stats (only when overall Image view selected)
+                if use_color_4:
+                    st.color_picker("Choose color for Hypermutation plot", value=chosen_color_4, key='color_4')
 
                 # T-test
                 if selected_meta_col == "Image (Default/Patient ID)":
@@ -319,17 +336,16 @@ def show():
                     group2 = df[df["Classification"] ==
                                 "non-GC"]["AID+/CD20+_hyper"].dropna()
 
-                    t_stat, p_val = ttest_ind(
-                        group1, group2, equal_var=False)
+                    t_result = ttest_ind(group1, group2, equal_var=False)
+                    t_stat = getattr(t_result, 'statistic', t_result[0])
+                    p_val = _to_float(getattr(t_result, 'pvalue', t_result[1]))
 
                     st.markdown(
                         f"**Two-tailed t-test (GC vs. non-GC overall)**: t = {t_stat:.3f}, p = {p_val:.3e}")
                     if p_val < 0.05:
-                        st.markdown(
-                            "**Result:** Significant difference (p < 0.05)")
+                        st.markdown("**Result:** Significant difference (p < 0.05)")
                     else:
-                        st.markdown(
-                            "**Result:** No significant difference (p ≥ 0.05)")
+                        st.markdown("**Result:** No significant difference (p ≥ 0.05)")
                 else:
                     st.info(f"T-test is only calculated for the overall GC vs. non-GC difference. Select 'Image (Default/Patient ID)' to run the t-test.")
                     

@@ -56,24 +56,11 @@ def show():
         His interests include [areas of interest or contribution to the lab].
         """)
 
-    # Team member 3 - Luca Wilkins
-    st.write("---")  # Separator
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        _show_image("wilkins.png", caption="Luka Wilkins", width=150)
-    with col2:
-        st.subheader("Luka Wilkins")
-        st.markdown("""
-        *Undergraduate Researcher - Grove City College*  
-        Luka specializes in [specific research focus or role in the lab]. 
-        He is enthusiastic about [areas of interest or contribution to the lab].
-        """)
-
     # Team member 4 - Sarah Zhou
     st.write("---")  # Separator
     col1, col2 = st.columns([1, 3])
     with col1:
-        _show_image("macfawn.png", caption="Sarah Zhou", width=150)
+        _show_image("zhou.png", caption="Sarah Zhou", width=150)
     with col2:
         st.subheader("Sarah Zhou")
         st.markdown("""
