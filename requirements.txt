@@ -5,4 +5,4 @@ plotly==6.3.0
 plotnine==0.15.0
 scipy==1.16.1
 matplotlib==3.10.6
-streamlit-option-menu==0.4.4
+streamlit-option-menu
